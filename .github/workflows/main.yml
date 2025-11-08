@@ -1,22 +1,28 @@
-name: Deploy Fullstack App on EC2
+name: Deploy Fullstack App on Ubuntu AWS
 
 on:
   push:
     branches:
-      - main
+      - main   # triggers when you push to main branch
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: self-hosted   # your EC2 GitHub Actions runner
 
     strategy:
       matrix:
         node-version: [22.x]
-
+        
     steps:
-      - name: Checkout code
+      # ------------------------------
+      # CHECKOUT CODE
+      # ------------------------------
+      - name: Checkout repository
         uses: actions/checkout@v3
 
+      # ------------------------------
+      # NODE SETUP
+      # ------------------------------
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
         with:
@@ -25,6 +31,9 @@ jobs:
           cache-dependency-path: |
             server/package-lock.json
             client/package-lock.json
+
+      - name: Install PM2 globally
+        run: npm install -g pm2
 
       # ------------------------------
       # BACKEND SETUP
@@ -36,13 +45,13 @@ jobs:
       - name: Create backend .env file
         working-directory: ./server
         run: |
-          touch .env
           echo "${{ secrets.PROD_BACKEND_ENV }}" > .env
 
       - name: Start backend with PM2
         working-directory: ./server
         run: |
-          /home/ubuntu/.nvm/versions/node/v22.16.0/bin/pm2 restart backend || /home/ubuntu/.nvm/versions/node/v22.16.0/bin/pm2 start index.js --name backend
+          pm2 describe backend || pm2 start index.js --name backend
+          pm2 save
 
       # ------------------------------
       # FRONTEND SETUP
@@ -60,7 +69,6 @@ jobs:
       - name: Create frontend .env file
         working-directory: ./client
         run: |
-          touch .env
           echo "${{ secrets.PROD_FRONTEND_ENV }}" > .env
 
       - name: Build frontend
@@ -71,3 +79,14 @@ jobs:
         run: |
           sudo rm -rf /var/www/html/*
           sudo cp -r ./client/dist/* /var/www/html/
+          sudo systemctl restart nginx
+
+      # ------------------------------
+      # OPTIONAL: PM2 SAVE + LIST
+      # ------------------------------
+      - name: Save PM2 process list
+        run: pm2 save
+
+      - name: Show running PM2 processes
+        run: pm2 list
+
